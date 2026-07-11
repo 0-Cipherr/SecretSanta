@@ -20,7 +20,7 @@ import {
 contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     CREATE3Factory factory;
     address[] authorized;
-
+    uint32 endpoint;
     struct VaultDeployInfo {
         bytes creationCode;
         bytes32 _originalSalt;
@@ -38,6 +38,7 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     constructor(address _endpoint) Ownable(msg.sender) OApp(_endpoint, _owner) {
         factory = new CREATE3Factory();
         authorized.push(address(this));
+        endpoint = _endpoint;
     }
 
     function addLZPeer(uint32 _eid, bytes32 _peer) public {
@@ -61,21 +62,60 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         }
     }
 
+    function createVaultQuote(
+        uint32[] memory _vaultChains
+    ) public returns (uint256) {
+        if (_vaultChains.length > 0) {
+            return getMultiChainDeployQuote(_vaultChains);
+        }
+        return 0;
+    }
+
     //vault chains is optional
     function createVault(
         uint256 _vaultId,
         uint32[] memory _vaultChains
     ) public {
         if (_vaultChains.length > 0) {
-            multichainDeploy(_vaultChains);
+            multichainDeploy(_vaultId, _vaultChains);
         } else {
-            deploy(_vaultId);
+            deploy(_vaultChains); //deploy on current chain
         }
     }
 
-    function multichainDeploy(uint32[] memory _vaultChains) public {
-        for (uint256 i = 0; i < _vaultChains.length; i++){
-            MessagingFee
+    function getMultiChainDeployQuote(
+        uint32[] memory _vaultChains
+    ) public view returns (uint256) {
+        uint256 _total;
+        for (uint256 i = 0; i < _vaultChains.length; i++) {
+            if (_vaultChains[i] != endpoint) {
+                bytes _message = abi.encodeWithSignature("deploy()"); //arguments updated later on need to workon vault
+                MsgQuote memory _quote = getMessageQuote(
+                    _vaultChains[i],
+                    _message,
+                    abi.encode("")
+                );
+                _total += _quote.fee;
+            }
+        }
+        return _total;
+    }
+
+    function multichainDeploy(
+        uint256 _id,
+        uint32[] memory _vaultChains
+    ) public payable {
+        for (uint256 i = 0; i < _vaultChains.length; i++) {
+            if (_vaultChains[i] != endpoint) {
+                bytes _message = abi.encodeWithSignature("deploy()"); //arguments updated later on need to workon vault
+                MessagingFee memory _quote = getMessageQuote(
+                    _vaultChains[i],
+                    _message,
+                    abi.encode("")
+                );
+            } else {
+                deploy(_id);
+            }
         }
     }
 
@@ -122,7 +162,7 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         return MsgQuote(_dstEid, _message, _options, _fee, _quote.nativeFee);
     }
     function sendMessage(MsgQuote memory _quote) public payable {
-        require(msg.vale >= _quote.fee, "Not enough funds to coninue:(");
+        require(msg.value >= _quote.fee, "Not enough funds to coninue:(");
         _lzSend(
             _quote.dstEid,
             _quote.message,
