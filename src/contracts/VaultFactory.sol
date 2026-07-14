@@ -73,13 +73,14 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
 
     //vault chains is optional
     function createVault(
+        address _creator,
         uint256 _vaultId,
         uint32[] memory _vaultChains
     ) public {
         if (_vaultChains.length > 0) {
-            multichainDeploy(_vaultId, _vaultChains);
+            multichainDeploy(_creator, _vaultId, _vaultChains);
         } else {
-            deploy(_vaultChains); //deploy on current chain
+            deploy(_creator, _vaultChains); //deploy on current chain
         }
     }
 
@@ -102,26 +103,28 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     }
 
     function multichainDeploy(
+        address _creator,
         uint256 _id,
         uint32[] memory _vaultChains
     ) public payable {
         for (uint256 i = 0; i < _vaultChains.length; i++) {
             if (_vaultChains[i] != endpoint) {
                 bytes _message = abi.encodeWithSignature("deploy()"); //arguments updated later on need to workon vault
-                MessagingFee memory _quote = getMessageQuote(
+                MsgQuote memory _quote = getMessageQuote(
                     _vaultChains[i],
                     _message,
                     abi.encode("")
                 );
+                sendMessage(_quote);
             } else {
-                deploy(_id);
+                deploy(_creator, _id);
             }
         }
     }
 
     //pass in the vault id we get from vault registry only the vault registry and authorized can call this contract
-    function deploy(uint256 _id) public returns (address) {
-        VaultManager subDeployment = new VaultManager();
+    function deploy(address _creator, uint256 _id) public returns (address) {
+        VaultManager subDeployment = new VaultManager(_creator);
         address vaultOriginalAddr = address(subDeployment); //remmebr vault has cosntructor params
         bytes32 salt = keccak256(abi.encode(vaultOriginalAddr));
         bytes memory creationCode = type(VaultManager).creationCode;

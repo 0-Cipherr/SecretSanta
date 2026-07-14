@@ -9,13 +9,14 @@ interface IBridge {
         uint256 _srcChainId,
         uint256 _destChainID,
         bytes memory adapterParams
-    ) external payable returns (bytes memory);
+    ) external returns (bytes memory);
     function bridge(bytes memory adapterParams) external payable;
     //should be custom function to calland run to claim incentives
     function customCall(
+        address _toCall,
         bytes memory funSig,
         bytes memory _adapterParams
-    ) external;
+    ) external payable;
 }
 //ibridge
 
