@@ -5,4 +5,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "../interfaces/IERC20.sol";
 contract StrategyAdapter is Ownable {
     constructor() Ownable(msg.sender) {}
+
+    function deposit() public payable {}
+
+    function withraw() public {}
 }
