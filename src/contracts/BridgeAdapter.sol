@@ -3,7 +3,9 @@ pragma solidity ^0.8.13;
 import {IBridge} from "../interfaces/IBridge.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "../interfaces/IERC20.sol";
+import {IAuthorizer} from "../contracts/IAuthorizer.sol";
 contract BridgeAdapter is Ownable {
+    IAuthorizer authorizer;
     address[] _authorized;
     uint256 _currentId = 0;
     struct BridgeInfo {
@@ -15,7 +17,7 @@ contract BridgeAdapter is Ownable {
     }
     mapping(uint256 => BridgeInfo) bridges;
     modifier verifyCaller(address caller) {
-        bool found = searchAuthorized(caller);
+        bool found = authorizer.authorizers[caller];
         require(msg.sender == caller, "Unauthorized");
         require(found == true, "Caller no authorized");
         _;
@@ -118,6 +120,7 @@ contract BridgeAdapter is Ownable {
         public
         verifyAdapter(id)
         HasChain(bridges[id]._supportedChains, _destChainID)
+        verifyCalller(msg.sender)
         returns (bytes memory)
     {
         bytes memory _quote = bridges[id].adapter.bridgeQuote(
@@ -140,21 +143,31 @@ contract BridgeAdapter is Ownable {
         address _spender,
         uint256 _amount,
         address asset
-    ) public verifyAdapter(id) verifyAsset(id, asset) verifyCaller(_caller) {
+    ) public verifyAdapter(id) verifyAsset(id, asset) verifyCaller(msg.sender) {
         bridges[id]._supportedTokens[tokenIndex].approve(_spender, _amount);
     }
 
-    function getAdapterAddress(uint256 id) public view returns (address) {
+    function getAdapterAddress(
+        uint256 id
+    ) public view verifyCaller(msg.sender) returns (address) {
         return address(bridges[id].adapter);
     }
 
-    function getName(uint256 id) public view returns (string memory) {
+    function getName(
+        uint256 id
+    ) public view verifyCaller(msg.sender) returns (string memory) {
         return bridges[id].name;
     }
 
     function getSupportedChains(
         uint256 id
-    ) public view verifyAdapter(id) returns (uint256[] memory) {
+    )
+        public
+        view
+        verifyAdapter(id)
+        verifyCaller(msg.sender)
+        returns (uint256[] memory)
+    {
         return bridges[id]._supportedChains;
     }
 
@@ -168,7 +181,7 @@ contract BridgeAdapter is Ownable {
         payable
         verifyAdapter(id)
         HasChain(bridges[id]._supportedChains, destChainId)
-        verifyCaller(_caller)
+        verifyCaller(msg.sender)
     {
         bridges[id].adapter.bridge{value: msg.value}(adapterData);
     }
@@ -182,7 +195,7 @@ contract BridgeAdapter is Ownable {
         address _toCall,
         bytes memory funSig,
         bytes memory _adapterParams
-    ) private verifyCaller(_caller) verifyAdapter(id) returns (bool) {
+    ) private verifyCaller(msg.sender) verifyAdapter(id) returns (bool) {
         //adapter should call from its contract to claim any icnentive
         bridges[id].adapter.customCall(_toCall, funSig, _adapterParams);
         return true;

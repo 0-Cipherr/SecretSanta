@@ -4,7 +4,7 @@ import {IBridge} from "../interfaces/IBridge.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "../interfaces/IERC20.sol";
 contract Authorizer is Ownable {
-    mapping(address => bool) authorizers;
+    mapping(address => bool) public authorizers;
 
     modifier verifyCaller(address caller) {
         bool found = authorizers[caller];
@@ -16,6 +16,14 @@ contract Authorizer is Ownable {
         if (_authorizers.length > 0) {
             bulkAdd(_authorizers);
         }
+    }
+
+    function verifyCallerSig(address caller) public view returns (bool) {
+        bool found = authorizers[caller];
+        require(msg.sender == caller, "Unauthorized");
+        require(found == true, "Caller no authorized");
+
+        return true;
     }
 
     function bulkAdd(address[] memory authorizedList) public {
