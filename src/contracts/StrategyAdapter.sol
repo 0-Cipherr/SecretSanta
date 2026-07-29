@@ -26,6 +26,7 @@ contract StrategyAdapter is Ownable {
         address asset;
         uint256 allocationBps;
         bytes config;
+        bool isDex;
     }
 
     struct StrategyMetrics {
@@ -71,7 +72,8 @@ contract StrategyAdapter is Ownable {
         uint8 strategyType,
         address asset,
         uint256 allocationBps,
-        bytes config
+        bytes config,
+        bool isDex;
     ) public verifyCaller(msg.sender) {
         strategy.push(
             StrategyInfo(
@@ -83,7 +85,8 @@ contract StrategyAdapter is Ownable {
                 0,
                 asset,
                 0,
-                bytes(0)
+                bytes(0),
+                false
             )
         );
         increaseCurrentStratId();

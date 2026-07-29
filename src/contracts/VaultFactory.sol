@@ -4,6 +4,8 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 import {CREATE3Factory} from "./CREATE3Factory.sol";
+import {ICREATE3Factory} from "../interfaces/ICREATE3Factory.sol";
+
 import {VaultManager} from "./VaultManager.sol";
 
 import {
@@ -18,9 +20,20 @@ import {
 //operates from the hub to deploy contracts on antoher chains we deploy from the main chain
 //using oapp
 contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
-    CREATE3Factory factory;
+    ICREATE3Factory factory;
+    FactoryInfo[] factories;
+    MessengerInfo[] messagePeers; //this is located in simplemessenger.sol , tits purpose simple relayer to use CREATE3 factory to deploy same deterministic address across all chains
     address[] authorized;
     uint32 endpoint;
+    struct FactoryInfo {
+        uint256 chainId;
+        ICREATE3Factory factory;
+    }
+
+    struct MessengerInfo {
+        uint256 chainId;
+        address messenger;
+    }
     struct VaultDeployInfo {
         bytes creationCode;
         bytes32 _originalSalt;
@@ -35,10 +48,20 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     mapping(uint32 => bytes32) facotryPeer; //this is the peers we ommunicate with
     mapping(uint256 => VaultDeployInfo) vaultDeployment;
     //endpoint of the current chain we are deplyoign on
-    constructor(address _endpoint) Ownable(msg.sender) OApp(_endpoint, _owner) {
+    constructor(
+        address _endpoint,
+        FactoryInfo[] _factories,
+        MessengerInfo[] messengers
+    ) Ownable(msg.sender) OApp(_endpoint, _owner) {
         factory = new CREATE3Factory();
+        factories = _factories;
         authorized.push(address(this));
         endpoint = _endpoint;
+        messagePers = messengers;
+    }
+
+    function addFactory(uint256 chainId, CREATE3Factory _factory) public {
+        factories.push(FactoryInfo(chainId, _factory));
     }
 
     function addLZPeer(uint32 _eid, bytes32 _peer) public {
@@ -85,16 +108,23 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     }
 
     function getMultiChainDeployQuote(
-        uint32[] memory _vaultChains
+        uint32[] memory _vaultChains,
+        bytes32 salt,
+        bytes memory creationCode
     ) public view returns (uint256) {
         uint256 _total;
         for (uint256 i = 0; i < _vaultChains.length; i++) {
             if (_vaultChains[i] != endpoint) {
-                bytes _message = abi.encodeWithSignature("deploy()"); //arguments updated later on need to workon vault
+                bytes _message = abi.encodeWithSignature(
+                    "deployContract(bytes32, bytes)",
+                    salt,
+                    creationCode
+                ); //arguments updated later on need to workon vault
                 MsgQuote memory _quote = getMessageQuote(
-                    _vaultChains[i],
+                    _vaultChains[i].messenger,
                     _message,
-                    abi.encode("")
+                    abi.encode(""),
+                    messagePeers[i]
                 );
                 _total += _quote.fee;
             }
@@ -123,7 +153,10 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     }
 
     //pass in the vault id we get from vault registry only the vault registry and authorized can call this contract
-    function deploy(address _creator, uint256 _id) public returns (address) {
+    function deploy(
+        address _creator,
+        uint256 _id
+    ) public payable returns (address) {
         VaultManager subDeployment = new VaultManager(_creator);
         address vaultOriginalAddr = address(subDeployment); //remmebr vault has cosntructor params
         bytes32 salt = keccak256(abi.encode(vaultOriginalAddr));
@@ -158,7 +191,8 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     function getMessageQuote(
         uint32 _dstEid,
         bytes _message,
-        bytes _options
+        bytes _options,
+        address destination
     ) public view returns (MsgQuote memory) {
         MessagingFee memory _quote = _quote(_dstEid, _message, _options, false);
 

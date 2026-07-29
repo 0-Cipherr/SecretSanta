@@ -21,4 +21,6 @@ interface IStrategy {
     function calculateApy() external returns (uint256);
 
     function updateApy() external;
+    function updatePoolUsed(bytes memory adapterParams) external;
+    function enterPosition(bytes memory adapterParams) external;
 }
