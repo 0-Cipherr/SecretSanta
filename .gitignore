@@ -18,3 +18,13 @@ docs/
 .env
 .env.*
 !.env.example
+
+# Foundry local build directories
+out/
+cache/
+
+# Environment configurations containing sensitive keys
+.env
+
+# Local machine storage
+.foundry/
