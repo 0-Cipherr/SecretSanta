@@ -41,6 +41,7 @@ contract SimpeMessenger is Oapp, OAppOptionsType3 {
     }
 
     function deployContract(
+        uint256 _id,
         address owner,
         bytes creationCode,
         bytes32 _originalSalt,

@@ -20,6 +20,7 @@ import {
 //operates from the hub to deploy contracts on antoher chains we deploy from the main chain
 //using oapp
 contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
+    uint256 currentId = 0;
     ICREATE3Factory factory;
     FactoryInfo[] factories;
     mapping(uint256 => MessengerInfo) messengers;
@@ -64,6 +65,10 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         messagePers = messengers;
     }
 
+    function increaseId() public {
+        ++currentId;
+    }
+
     function addEndpoint(uint256 chainId, uint32 enpointId) public {
         endpoints[chainId] = endpointId;
     }
@@ -72,8 +77,9 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         factories.push(FactoryInfo(chainId, _factory));
     }
 
-    function addLZPeer(uint32 _eid, bytes32 _peer) public {
+    function addLZPeer(uint32 _eid, bytes32 _peer, uint256 chainId) public {
         facotryPeer[_eid] = _peer;
+        endpoints[chainId] = _eid;
     }
 
     function removePeer(uint32 _eid, bytes32 _peer) public verifyPeer(_eid) {
@@ -124,12 +130,16 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         for (uint256 i = 0; i < _vaultChains.length; i++) {
             if (_vaultChains[i] != endpoint) {
                 bytes _message = abi.encodeWithSignature(
-                    "deployContract(bytes32, bytes)",
+                    "deployContract(uint256, address,bytes,bytes32,address,uint32[])",
+                    currentId,
+                    _creator,
+                    creationCode,
                     salt,
-                    creationCode
+                    _vaultHub,
+                    _vaultChains
                 ); //arguments updated later on need to workon vault
                 MsgQuote memory _quote = getMessageQuote(
-                 endpoints[_vaultChains[i]], //goes to endpoint in chain provided ,
+                    endpoints[_vaultChains[i]], //goes to endpoint in chain provided ,
                     _message,
                     abi.encode(""),
                     messagePeers[i]
@@ -139,35 +149,44 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         }
         return _total;
     }
-    function addPeer(uint32 endpointId, address peerAddress )public{
-      bytes32 _peer =   bytes32(uint160(peerAddress));
+    function addPeer(uint32 endpointId, address peerAddress) public {
+        bytes32 _peer = bytes32(uint160(peerAddress));
 
         _setPeer(_eid, _peer);
-
     }
 
-    function getSalt()public{}
+    function getSalt() public {
+        return vaults[id].salt;
+    }
 
-    function getCreationCode()public[
-
-    ]
+    function getCreationCode(uint256 id) public {
+        return vaults[id].creationCode;
+    }
 
     function multichainDeploy(
         address _creator,
-        uint256 _id,
-        uint32[] memory _vaultChains
+        uint32[] memory _vaultChains,
+        bool deployHub
     ) public payable {
+        address _vaultHub = deploy(_creator, currentId, _vaultChains);
+
         for (uint256 i = 0; i < _vaultChains.length; i++) {
             if (_vaultChains[i] != endpoint) {
-                bytes _message = abi.encodeWithSignature("deployContract(address,bytes,bytes32,address,uint32[])",_creator,  ); //arguments updated later on need to workon vault
+                bytes _message = abi.encodeWithSignature(
+                    "deployContract(uint256, address,bytes,bytes32,address,uint32[])",
+                    currentId,
+                    _creator,
+                    creationCode,
+                    salt,
+                    _vaultHub,
+                    _vaultChains
+                ); //arguments updated later on need to workon vault
                 MsgQuote memory _quote = getMessageQuote(
-                    endpoints[_vaultChains[i]], //goes to endpoint in chain provided 
+                    endpoints[_vaultChains[i]], //goes to endpoint in chain provided
                     _message,
                     abi.encode("")
                 );
                 sendMessage(_quote);
-            } else {
-                deploy(_creator, _id);
             }
         }
     }
@@ -175,7 +194,8 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     //pass in the vault id we get from vault registry only the vault registry and authorized can call this contract
     function deploy(
         address _creator,
-        uint256 _id
+        uint256 _id,
+        uint256[] _vaultChains
     ) public payable returns (address) {
         VaultManager subDeployment = new VaultManager(_creator);
         address vaultOriginalAddr = address(subDeployment); //remmebr vault has cosntructor params
@@ -183,17 +203,29 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         bytes memory creationCode = type(VaultManager).creationCode;
         address deployedVault = factory.deploy(salt, creationCode); //deploys address layer zero style we use this to deploy all contract same address on all chans
         // returns layerzero deployment
-        storeDeployment(creationCode, salt, deployedVault, _id);
+        storeDeployment(creationCode, salt, deployedVault, _id, _vaultChains);
         return deployedVault;
     }
 
     function storeDeployment(
         bytes memory creationCode,
-        bytes32 salt,
+        bytes32 memory salt,
         address lzAddress,
-        uint256 id
+        uint256 id,
+        uint256[] deployments
     ) public {
-        vaultDeployment[id] = VaultDeployInfo(creationCode, salt, lzAddress);
+        vaultDeployment[id] = VaultDeployInfo(
+            creationCode,
+            salt,
+            lzAddress,
+            deployments
+        );
+    }
+
+    function addDeployedEndpoints(uint256 id, uint256[] _endpoints) public {
+        for (uint256 i = 0; i < _endpoints.length; i++) {
+            vaultDeployment[id]._deployedEndpoints.push(_endpoints[i]);
+        }
     }
 
     function getDeploymentInfo(
