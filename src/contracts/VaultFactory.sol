@@ -22,9 +22,13 @@ import {
 contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     ICREATE3Factory factory;
     FactoryInfo[] factories;
+    mapping(uint256 => MessengerInfo) messengers;
     MessengerInfo[] messagePeers; //this is located in simplemessenger.sol , tits purpose simple relayer to use CREATE3 factory to deploy same deterministic address across all chains
     address[] authorized;
     uint32 endpoint;
+    mapping(uint256 => uint32) endpoints;
+    bytes32 salt;
+    bytes creationCode;
     struct FactoryInfo {
         uint256 chainId;
         ICREATE3Factory factory;
@@ -53,11 +57,15 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         FactoryInfo[] _factories,
         MessengerInfo[] messengers
     ) Ownable(msg.sender) OApp(_endpoint, _owner) {
-        factory = new CREATE3Factory();
+        factory = I();
         factories = _factories;
         authorized.push(address(this));
         endpoint = _endpoint;
         messagePers = messengers;
+    }
+
+    function addEndpoint(uint256 chainId, uint32 enpointId) public {
+        endpoints[chainId] = endpointId;
     }
 
     function addFactory(uint256 chainId, CREATE3Factory _factory) public {
@@ -121,7 +129,7 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
                     creationCode
                 ); //arguments updated later on need to workon vault
                 MsgQuote memory _quote = getMessageQuote(
-                    _vaultChains[i].messenger,
+                 endpoints[_vaultChains[i]], //goes to endpoint in chain provided ,
                     _message,
                     abi.encode(""),
                     messagePeers[i]
@@ -131,6 +139,18 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
         }
         return _total;
     }
+    function addPeer(uint32 endpointId, address peerAddress )public{
+      bytes32 _peer =   bytes32(uint160(peerAddress));
+
+        _setPeer(_eid, _peer);
+
+    }
+
+    function getSalt()public{}
+
+    function getCreationCode()public[
+
+    ]
 
     function multichainDeploy(
         address _creator,
@@ -139,9 +159,9 @@ contract VaultFactory is Ownable, OApp, OAppOptionsType3 {
     ) public payable {
         for (uint256 i = 0; i < _vaultChains.length; i++) {
             if (_vaultChains[i] != endpoint) {
-                bytes _message = abi.encodeWithSignature("deploy()"); //arguments updated later on need to workon vault
+                bytes _message = abi.encodeWithSignature("deployContract(address,bytes,bytes32,address,uint32[])",_creator,  ); //arguments updated later on need to workon vault
                 MsgQuote memory _quote = getMessageQuote(
-                    _vaultChains[i],
+                    endpoints[_vaultChains[i]], //goes to endpoint in chain provided 
                     _message,
                     abi.encode("")
                 );
